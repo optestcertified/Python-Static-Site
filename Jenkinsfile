@@ -23,7 +23,7 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                sudo -S apt install -y python3-venv
+                apt install -y python3-venv
                 python3 -m venv venv
                 source venv/bin/activate
                 pip3 install -r requirements.txt
