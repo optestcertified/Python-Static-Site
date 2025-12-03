@@ -3,8 +3,8 @@ pipeline {
 
     environment {
         DROPLET_USER = "root"
-        DROPLET_IP = "209.38.37.241"
-        SSH_KEY_ID = "droplets-ssh-key"   // Jenkins credentials ID
+        DROPLET_IP = "138.197.37.221"
+        SSH_KEY_ID = "droplet-ssh-key"   // Jenkins credentials ID
         REPO_URL = "https://github.com/optestcertified/python-static-site.git"
         BRANCH = "main"
     }
