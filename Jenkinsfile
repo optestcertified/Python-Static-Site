@@ -4,13 +4,13 @@ pipeline {
     environment {
         DROPLET_USER = "root"
         DROPLET_IP = "138.197.37.221"
-        SSH_KEY_ID = "droplet-ssh-key"   // Jenkins credentials ID
+        SSH_KEY_ID = "droplet-ssh-key"
         REPO_URL = "https://github.com/optestcertified/python-static-site.git"
         BRANCH = "main"
     }
 
     triggers {
-        githubPush()   // Listen for GitHub webhook
+        githubPush()   // GitHub webhook trigger
     }
 
     stages {
@@ -21,20 +21,17 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Install Dependencies (Jenkins Node)') {
             steps {
                 sh '''
-                sudo apt update -y
-                sudo apt install -y python3 python3-pip python3-venv git
+                sudo apt-get update -y
+                sudo apt-get install -y python3 python3-pip python3-venv git
 
-                # Create Python virtual environment
                 python3 -m venv venv
                 . venv/bin/activate
 
                 pip install --upgrade pip
-
-                # Install requirements inside venv
-                pip install -r requirements.txt
+                pip install -r requirements.txt || true
                 '''
             }
         }
@@ -43,40 +40,43 @@ pipeline {
             steps {
                 sh '''
                 . venv/bin/activate
-                python -m py_compile app.py
+                python3 -m py_compile app.py
                 '''
             }
         }
 
-        stage('Deploy to Droplet') {
+        stage('Deploy to DigitalOcean Droplet') {
             steps {
                 sshagent(credentials: [env.SSH_KEY_ID]) {
                     sh """
                     ssh -o StrictHostKeyChecking=no ${DROPLET_USER}@${DROPLET_IP} << 'EOF'
+
                         set -e
 
-                        echo "🔹 Installing Python & Git..."
-                        apt update -y
-                        apt install -y python3 python3-pip python3-venv git
+                        echo "🔹 Updating system..."
+                        apt-get update -y
+                        apt-get install -y python3 python3-pip python3-venv git
 
-                        echo "🔹 Stopping old app..."
+                        echo "🔹 Stopping existing app (if running)..."
                         pkill -f app.py || true
 
-                        echo "🔹 Pulling latest code..."
+                        echo "🔹 Fetching latest application code..."
                         rm -rf python-static-site
                         git clone ${REPO_URL}
+
                         cd python-static-site
 
-                        echo "🔹 Creating Python venv..."
+                        echo "🔹 Creating Python virtual environment..."
                         python3 -m venv venv
-                        . venv/bin/activate
 
                         echo "🔹 Installing dependencies..."
-                        pip install -r requirements.txt
+                        ./venv/bin/pip install --upgrade pip
+                        ./venv/bin/pip install -r requirements.txt
 
-                        echo "🔹 Starting app..."
-                        nohup python3 app.py > app.log 2>&1 &
-                        echo "🎉 App deployed successfully!"
+                        echo "🔹 Starting application..."
+                        nohup ./venv/bin/python3 app.py > app.log 2>&1 &
+
+                        echo "🎉 Application deployed successfully!"
                     EOF
                     """
                 }
@@ -86,10 +86,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Deployment successful to DigitalOcean Droplet!"
+            echo "✅ Deployment successful!"
         }
         failure {
-            echo "❌ Deployment failed. Please check Jenkins console output."
+            echo "❌ Deployment failed — check Jenkins logs."
         }
     }
 }
