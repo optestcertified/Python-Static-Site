@@ -7,31 +7,29 @@ pipeline {
         SSH_KEY_ID = "droplets-ssh-key"
         REPO_URL = "https://github.com/optestcertified/python-static-site.git"
         BRANCH = "main"
+        REMOTE_DIR = "/var/www/python-static-site"
     }
 
     triggers {
-        githubPush()   // GitHub webhook trigger
+        githubPush()
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                git branch: "${env.BRANCH}", url: "${env.REPO_URL}"
+                git branch: "${BRANCH}", url: "${REPO_URL}"
             }
         }
 
-        stage('Install Dependencies (Jenkins Node)') {
+        stage('Install Dependencies (Local Jenkins)') {
             steps {
                 sh '''
-                apt-get update -y
-                apt-get install -y python3 python3-pip python3-venv git
-
                 python3 -m venv venv
                 . venv/bin/activate
 
                 pip install --upgrade pip
-                pip install -r requirements.txt || true
+                pip install -r requirements.txt
                 '''
             }
         }
@@ -47,49 +45,9 @@ pipeline {
 
         stage('Deploy to DigitalOcean Droplet') {
             steps {
-                sshagent(credentials: [env.SSH_KEY_ID]) {
+                sshagent(credentials: [SSH_KEY_ID]) {
                     sh """
-                    ssh -o StrictHostKeyChecking=no ${DROPLET_USER}@${DROPLET_IP} << 'EOF'
+                    # Create folder on Droplet
+                    ssh -o StrictHostKeyChecking=no ${DROPLET_USER}@${DROPLET_IP} "mkdir -p ${REMOTE_DIR}"
 
-                        set -e
-
-                        echo "🔹 Updating system..."
-                        apt-get update -y
-                        apt-get install -y python3 python3-pip python3-venv git
-
-                        echo "🔹 Stopping existing app (if running)..."
-                        pkill -f app.py || true
-
-                        echo "🔹 Fetching latest application code..."
-                        rm -rf python-static-site
-                        git clone ${REPO_URL}
-
-                        cd python-static-site
-
-                        echo "🔹 Creating Python virtual environment..."
-                        python3 -m venv venv
-
-                        echo "🔹 Installing dependencies..."
-                        ./venv/bin/pip install --upgrade pip
-                        ./venv/bin/pip install -r requirements.txt
-
-                        echo "🔹 Starting application..."
-                        nohup ./venv/bin/python3 app.py > app.log 2>&1 &
-
-                        echo "🎉 Application deployed successfully!"
-                    EOF
-                    """
-                }
-            }
-        }
-    }
-
-    post {
-        success {
-            echo "✅ Deployment successful!"
-        }
-        failure {
-            echo "❌ Deployment failed — check Jenkins logs."
-        }
-    }
-}
+                    # Copy project files to Droplet securely
