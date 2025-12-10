@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         DROPLET_USER = "root"
-        DROPLET_IP = "138.68.31.248"
+        DROPLET_IP = "206.189.78.225"
         SSH_KEY_ID = "droplets-ssh-key"
         REPO_URL = "https://github.com/optestcertified/python-static-site.git"
         BRANCH = "main"
