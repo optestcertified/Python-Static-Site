@@ -7,7 +7,6 @@ pipeline {
         SSH_KEY_ID = "droplets-ssh-key"
         REPO_URL = "https://github.com/optestcertified/python-static-site.git"
         BRANCH = "main"
-        REMOTE_DIR = "/var/www/python-static-site"
     }
 
     triggers {
@@ -15,7 +14,6 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
                 git branch: "${BRANCH}", url: "${REPO_URL}"
@@ -24,53 +22,46 @@ pipeline {
 
         stage('Install Dependencies (Local Jenkins)') {
             steps {
-                sh '''
-                python3 -m venv venv
-                . venv/bin/activate
-
-                pip install --upgrade pip
-                pip install -r requirements.txt
-                '''
+                sh """
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                """
             }
         }
 
         stage('Syntax Test') {
             steps {
-                sh '''
-                . venv/bin/activate
-                python3 -m py_compile app.py
-                '''
+                sh """
+                    . venv/bin/activate
+                    python3 -m py_compile app.py
+                """
             }
         }
 
         stage('Deploy to DigitalOcean Droplet') {
             steps {
-                sshagent(credentials: [SSH_KEY_ID]) {
+                sshagent(["${SSH_KEY_ID}"]) {
                     sh """
-                    # Create folder on Droplet
-                    ssh -o StrictHostKeyChecking=no ${DROPLET_USER}@${DROPLET_IP} "mkdir -p ${REMOTE_DIR}"
+                        ssh -o StrictHostKeyChecking=no ${DROPLET_USER}@${DROPLET_IP} << 'EOF'
+                            set -e
+                            apt-get update -y
+                            apt-get install -y python3 python3-pip python3-venv git
 
-                    # Copy project files to Droplet securely
-                    rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" ./ ${DROPLET_USER}@${DROPLET_IP}:${REMOTE_DIR}
+                            pkill -f app.py || true
 
-                    # Install dependencies & restart Python app
-                    ssh -o StrictHostKeyChecking=no ${DROPLET_USER}@${DROPLET_IP} << 'EOF'
-                        set -e
-                        cd ${REMOTE_DIR}
+                            rm -rf python-static-site
+                            git clone ${REPO_URL}
 
-                        echo "🔹 Installing Python dependencies..."
-                        python3 -m venv venv
-                        ./venv/bin/pip install --upgrade pip
-                        ./venv/bin/pip install -r requirements.txt
+                            cd python-static-site
 
-                        echo "🔹 Killing previous app session (if any)..."
-                        pkill -f app.py || true
+                            python3 -m venv venv
+                            ./venv/bin/pip install --upgrade pip
+                            ./venv/bin/pip install -r requirements.txt
 
-                        echo "🔹 Starting application..."
-                        nohup ./venv/bin/python3 app.py > app.log 2>&1 &
-
-                        echo "🎉 Application deployed successfully!"
-                    EOF
+                            nohup ./venv/bin/python3 app.py > app.log 2>&1 &
+                        EOF
                     """
                 }
             }
@@ -78,11 +69,7 @@ pipeline {
     }
 
     post {
-        success {
-            echo "✅ Deployment successful!"
-        }
-        failure {
-            echo "❌ Deployment failed — check Jenkins logs."
-        }
+        success { echo "Deployment successful!" }
+        failure { echo "Deployment failed." }
     }
 }
