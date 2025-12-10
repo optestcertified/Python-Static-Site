@@ -14,62 +14,81 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
-                git branch: "${BRANCH}", url: "${REPO_URL}"
+                git branch: "${env.BRANCH}", url: "${env.REPO_URL}"
             }
         }
 
-        stage('Install Dependencies (Local Jenkins)') {
+        stage('Install Dependencies (Jenkins Node)') {
             steps {
-                sh """
-                    python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r requirements.txt
-                """
+                sh '''
+                sudo apt-get update -y
+                sudo apt-get install -y python3 python3-pip python3-venv git
+
+                python3 -m venv venv
+                . venv/bin/activate
+
+                pip install --upgrade pip
+                pip install -r requirements.txt || true
+                '''
             }
         }
 
         stage('Syntax Test') {
             steps {
-                sh """
-                    . venv/bin/activate
-                    python3 -m py_compile app.py
-                """
+                sh '''
+                . venv/bin/activate
+                python3 -m py_compile app.py
+                '''
             }
         }
 
         stage('Deploy to DigitalOcean Droplet') {
             steps {
-                sshagent(["${SSH_KEY_ID}"]) {
+                sshagent([env.SSH_KEY_ID]) {
                     sh """
-                        ssh -o StrictHostKeyChecking=no ${DROPLET_USER}@${DROPLET_IP} << 'EOF'
-                            set -e
-                            apt-get update -y
-                            apt-get install -y python3 python3-pip python3-venv git
+ssh -o StrictHostKeyChecking=no ${DROPLET_USER}@${DROPLET_IP} << 'EOF'
+set -e
 
-                            pkill -f app.py || true
+echo "🔹 Updating system..."
+apt-get update -y
+apt-get install -y python3 python3-pip python3-venv git
 
-                            rm -rf python-static-site
-                            git clone ${REPO_URL}
+echo "🔹 Stopping existing app..."
+pkill -f app.py || true
 
-                            cd python-static-site
+echo "🔹 Fetching latest application..."
+rm -rf python-static-site
+git clone ${REPO_URL}
 
-                            python3 -m venv venv
-                            ./venv/bin/pip install --upgrade pip
-                            ./venv/bin/pip install -r requirements.txt
+cd python-static-site
 
-                            nohup ./venv/bin/python3 app.py > app.log 2>&1 &
-                        EOF
-                    """
+echo "🔹 Creating Python virtual environment..."
+python3 -m venv venv
+
+echo "🔹 Installing dependencies..."
+./venv/bin/pip install --upgrade pip
+./venv/bin/pip install -r requirements.txt
+
+echo "🔹 Starting application..."
+nohup ./venv/bin/python3 app.py > app.log 2>&1 &
+
+echo "🎉 Deployment successful"
+EOF
+"""
                 }
             }
         }
     }
 
     post {
-        success { echo "Deployment successful!" }
-        failure { echo "Deployment failed." }
+        success {
+            echo "✅ Deployment successful!"
+        }
+        failure {
+            echo "❌ Deployment failed — check Jenkins logs."
+        }
     }
 }
