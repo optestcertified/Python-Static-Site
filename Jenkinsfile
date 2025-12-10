@@ -51,3 +51,38 @@ pipeline {
                     ssh -o StrictHostKeyChecking=no ${DROPLET_USER}@${DROPLET_IP} "mkdir -p ${REMOTE_DIR}"
 
                     # Copy project files to Droplet securely
+                    rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" ./ ${DROPLET_USER}@${DROPLET_IP}:${REMOTE_DIR}
+
+                    # Install dependencies & restart Python app
+                    ssh -o StrictHostKeyChecking=no ${DROPLET_USER}@${DROPLET_IP} << 'EOF'
+                        set -e
+                        cd ${REMOTE_DIR}
+
+                        echo "🔹 Installing Python dependencies..."
+                        python3 -m venv venv
+                        ./venv/bin/pip install --upgrade pip
+                        ./venv/bin/pip install -r requirements.txt
+
+                        echo "🔹 Killing previous app session (if any)..."
+                        pkill -f app.py || true
+
+                        echo "🔹 Starting application..."
+                        nohup ./venv/bin/python3 app.py > app.log 2>&1 &
+
+                        echo "🎉 Application deployed successfully!"
+                    EOF
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Deployment successful!"
+        }
+        failure {
+            echo "❌ Deployment failed — check Jenkins logs."
+        }
+    }
+}
