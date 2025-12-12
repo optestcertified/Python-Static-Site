@@ -1,5 +1,5 @@
 # Python-Static-Site 
-##CI/CD Pipeline with Jenkins & DigitalOcean
+## CI/CD Pipeline with Jenkins & DigitalOcean
 
 ## Overview
 This project automates the deployment of a Flask static site to a DigitalOcean Droplet using Jenkins.  
